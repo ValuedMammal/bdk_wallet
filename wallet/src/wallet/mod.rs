@@ -110,6 +110,13 @@ pub struct Wallet {
     secp: SecpCtx,
 }
 
+use bdk_chain::CanonicalizationParams;
+
+/// Default canonicalization parameters
+fn default_canonical_params() -> CanonicalizationParams {
+    CanonicalizationParams::default()
+}
+
 /// An update to [`Wallet`].
 ///
 /// It updates [`KeychainTxOutIndex`], [`bdk_chain::TxGraph`] and [`LocalChain`] atomically.
@@ -816,6 +823,7 @@ impl Wallet {
             .filter_chain_unspents(
                 &self.chain,
                 self.chain.tip().block_id(),
+                default_canonical_params(),
                 self.indexed_graph.index.outpoints().iter().cloned(),
             )
             .map(|((k, i), full_txo)| new_local_utxo(k, i, full_txo))
@@ -830,6 +838,7 @@ impl Wallet {
             .filter_chain_txouts(
                 &self.chain,
                 self.chain.tip().block_id(),
+                default_canonical_params(),
                 self.indexed_graph.index.outpoints().iter().cloned(),
             )
             .map(|((k, i), full_txo)| new_local_utxo(k, i, full_txo))
@@ -883,6 +892,7 @@ impl Wallet {
             .filter_chain_unspents(
                 &self.chain,
                 self.chain.tip().block_id(),
+                default_canonical_params(),
                 core::iter::once(((), op)),
             )
             .map(|(_, full_txo)| new_local_utxo(keychain, index, full_txo))
@@ -1058,7 +1068,11 @@ impl Wallet {
     pub fn get_tx(&self, txid: Txid) -> Option<WalletTx> {
         let graph = self.indexed_graph.graph();
         graph
-            .list_canonical_txs(&self.chain, self.chain.tip().block_id())
+            .list_canonical_txs(
+                &self.chain,
+                self.chain.tip().block_id(),
+                default_canonical_params(),
+            )
             .find(|tx| tx.tx_node.txid == txid)
     }
 
@@ -1077,7 +1091,11 @@ impl Wallet {
         let tx_graph = self.indexed_graph.graph();
         let tx_index = &self.indexed_graph.index;
         tx_graph
-            .list_canonical_txs(&self.chain, self.chain.tip().block_id())
+            .list_canonical_txs(
+                &self.chain,
+                self.chain.tip().block_id(),
+                default_canonical_params(),
+            )
             .filter(|c_tx| tx_index.is_tx_relevant(&c_tx.tx_node.tx))
     }
 
@@ -1112,6 +1130,7 @@ impl Wallet {
         self.indexed_graph.graph().balance(
             &self.chain,
             self.chain.tip().block_id(),
+            default_canonical_params(),
             self.indexed_graph.index.outpoints().iter().cloned(),
             |&(k, _), _| k == KeychainKind::Internal,
         )
@@ -1590,7 +1609,7 @@ impl Wallet {
         let txout_index = &self.indexed_graph.index;
         let chain_tip = self.chain.tip().block_id();
         let chain_positions = graph
-            .list_canonical_txs(&self.chain, chain_tip)
+            .list_canonical_txs(&self.chain, chain_tip, default_canonical_params())
             .map(|canon_tx| (canon_tx.tx_node.txid, canon_tx.chain_position))
             .collect::<HashMap<Txid, _>>();
 
@@ -1858,7 +1877,7 @@ impl Wallet {
         let confirmation_heights = self
             .indexed_graph
             .graph()
-            .list_canonical_txs(&self.chain, chain_tip)
+            .list_canonical_txs(&self.chain, chain_tip, default_canonical_params())
             .filter(|canon_tx| prev_txids.contains(&canon_tx.tx_node.txid))
             // This is for a small performance gain. Although `.filter` filters out excess txs, it
             // will still consume the internal `CanonicalIter` entirely. Having a `.take` here
@@ -2010,6 +2029,7 @@ impl Wallet {
                 .filter_chain_unspents(
                     &self.chain,
                     self.chain.tip().block_id(),
+                    default_canonical_params(),
                     self.indexed_graph.index.outpoints().iter().cloned(),
                 )
                 // only create LocalOutput if UTxO is mature

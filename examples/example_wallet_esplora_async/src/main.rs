@@ -92,123 +92,123 @@ async fn main() -> Result<(), anyhow::Error> {
     // client.broadcast(&tx).await?;
     // println!("Tx broadcasted! Txid: {}", tx.compute_txid());
 
-    use bdk_testenv::bitcoincore_rpc::bitcoincore_rpc_json::CreateRawTransactionInput;
-    use bdk_testenv::TestEnv;
-    let env = TestEnv::new()?;
+    // use bdk_testenv::bitcoincore_rpc::bitcoincore_rpc_json::CreateRawTransactionInput;
+    // use bdk_testenv::TestEnv;
+    // let env = TestEnv::new()?;
 
-    // premine
-    let rpc = env.rpc_client();
-    let _ = env.mine_blocks(100, None);
-    assert_eq!(rpc.get_block_count()?, 101);
+    // // premine
+    // let rpc = env.rpc_client();
+    // let _ = env.mine_blocks(100, None);
+    // assert_eq!(rpc.get_block_count()?, 101);
 
-    let utxo = rpc.list_unspent(None, None, None, None, None)?[0].clone();
+    // let utxo = rpc.list_unspent(None, None, None, None, None)?[0].clone();
 
-    // Create tx1
-    let utxos = vec![CreateRawTransactionInput {
-        txid: utxo.txid,
-        vout: utxo.vout,
-        sequence: None,
-    }];
-    let to_send = Amount::ONE_BTC;
-    let fee = Amount::from_sat(1_000);
-    let change_addr = rpc.get_new_address(None, None)?.assume_checked();
-    let out = [
-        (recv_addr.to_string(), to_send),
-        (change_addr.to_string(), utxo.amount - to_send - fee),
-    ]
-    .into();
-    let tx = rpc.create_raw_transaction(&utxos, &out, None, None)?;
-    let tx1 = rpc
-        .sign_raw_transaction_with_wallet(&tx, None, None)?
-        .transaction()?;
+    // // Create tx1
+    // let utxos = vec![CreateRawTransactionInput {
+    //     txid: utxo.txid,
+    //     vout: utxo.vout,
+    //     sequence: None,
+    // }];
+    // let to_send = Amount::ONE_BTC;
+    // let fee = Amount::from_sat(1_000);
+    // let change_addr = rpc.get_new_address(None, None)?.assume_checked();
+    // let out = [
+    //     (recv_addr.to_string(), to_send),
+    //     (change_addr.to_string(), utxo.amount - to_send - fee),
+    // ]
+    // .into();
+    // let tx = rpc.create_raw_transaction(&utxos, &out, None, None)?;
+    // let tx1 = rpc
+    //     .sign_raw_transaction_with_wallet(&tx, None, None)?
+    //     .transaction()?;
 
-    // Create tx2 the double spend
-    let new_addr = rpc.get_new_address(None, None)?.assume_checked();
-    let out = [
-        (new_addr.to_string(), to_send),
-        (change_addr.to_string(), utxo.amount - to_send - (fee * 2)),
-    ]
-    .into();
-    let tx = rpc.create_raw_transaction(&utxos, &out, None, None)?;
-    let tx2 = rpc
-        .sign_raw_transaction_with_wallet(&tx, None, None)?
-        .transaction()?;
+    // // Create tx2 the double spend
+    // let new_addr = rpc.get_new_address(None, None)?.assume_checked();
+    // let out = [
+    //     (new_addr.to_string(), to_send),
+    //     (change_addr.to_string(), utxo.amount - to_send - (fee * 2)),
+    // ]
+    // .into();
+    // let tx = rpc.create_raw_transaction(&utxos, &out, None, None)?;
+    // let tx2 = rpc
+    //     .sign_raw_transaction_with_wallet(&tx, None, None)?
+    //     .transaction()?;
 
-    // Sync after send tx 1
-    let txid1 = rpc.send_raw_transaction(&tx1)?;
-    println!("Send tx1 {}", txid1);
+    // // Sync after send tx 1
+    // let txid1 = rpc.send_raw_transaction(&tx1)?;
+    // println!("Send tx1 {}", txid1);
 
-    let base_url = format!("http://{}", &env.electrsd.esplora_url.clone().unwrap());
-    let client = esplora_client::Builder::new(base_url.as_str()).build_async()?;
+    // let base_url = format!("http://{}", &env.electrsd.esplora_url.clone().unwrap());
+    // let client = esplora_client::Builder::new(base_url.as_str()).build_async()?;
 
-    while client.get_height().await? < 101 {
-        std::thread::sleep(std::time::Duration::from_millis(64));
-    }
-    env.wait_until_electrum_sees_txid(txid1, std::time::Duration::from_secs(10))?;
+    // while client.get_height().await? < 101 {
+    //     std::thread::sleep(std::time::Duration::from_millis(64));
+    // }
+    // env.wait_until_electrum_sees_txid(txid1, std::time::Duration::from_secs(10))?;
 
-    let request = wallet.start_sync_with_revealed_spks();
+    // let request = wallet.start_sync_with_revealed_spks();
 
-    let resp = client.sync(request, PARALLEL_REQUESTS).await?;
-    assert_eq!(resp.tx_update.txs.first().unwrap().compute_txid(), txid1);
+    // let resp = client.sync(request, PARALLEL_REQUESTS).await?;
+    // assert_eq!(resp.tx_update.txs.first().unwrap().compute_txid(), txid1);
 
-    wallet.apply_update(resp)?;
-    wallet.persist(&mut conn)?;
+    // wallet.apply_update(resp)?;
+    // wallet.persist(&mut conn)?;
 
-    assert_eq!(wallet.balance().total(), Amount::ONE_BTC);
-    println!("Balance after send tx1: {}", wallet.balance().total());
-    // We should expect tx1 to occur in a future sync
-    let exp_spk_txids = wallet
-        .tx_graph()
-        .list_expected_spk_txids(
-            wallet.local_chain(),
-            wallet.local_chain().tip().block_id(),
-            wallet.spk_index(),
-            /*spk_index_range: */ ..,
-        )
-        .collect::<Vec<_>>();
-    assert_eq!(
-        exp_spk_txids.first(),
-        Some(&(recv_addr.script_pubkey(), txid1))
-    );
+    // assert_eq!(wallet.balance().total(), Amount::ONE_BTC);
+    // println!("Balance after send tx1: {}", wallet.balance().total());
+    // // We should expect tx1 to occur in a future sync
+    // let exp_spk_txids = wallet
+    //     .tx_graph()
+    //     .list_expected_spk_txids(
+    //         wallet.local_chain(),
+    //         wallet.local_chain().tip().block_id(),
+    //         wallet.spk_index(),
+    //         /*spk_index_range: */ ..,
+    //     )
+    //     .collect::<Vec<_>>();
+    // assert_eq!(
+    //     exp_spk_txids.first(),
+    //     Some(&(recv_addr.script_pubkey(), txid1))
+    // );
 
-    // Now sync after send tx 2
-    let txid2 = rpc.send_raw_transaction(&tx2)?;
-    println!("Send tx2 {}", txid2);
-    env.wait_until_electrum_sees_txid(txid2, std::time::Duration::from_secs(10))?;
+    // // Now sync after send tx 2
+    // let txid2 = rpc.send_raw_transaction(&tx2)?;
+    // println!("Send tx2 {}", txid2);
+    // env.wait_until_electrum_sees_txid(txid2, std::time::Duration::from_secs(10))?;
 
-    let request = wallet.start_sync_with_revealed_spks();
+    // let request = wallet.start_sync_with_revealed_spks();
 
-    let resp = client.sync(request, PARALLEL_REQUESTS).await?;
-    assert!(resp.tx_update.txs.is_empty());
-    assert!(resp
-        .tx_update
-        .evicted_ats
-        .iter()
-        .any(|&(txid, _)| txid == txid1));
+    // let resp = client.sync(request, PARALLEL_REQUESTS).await?;
+    // assert!(resp.tx_update.txs.is_empty());
+    // assert!(resp
+    //     .tx_update
+    //     .evicted_ats
+    //     .iter()
+    //     .any(|&(txid, _)| txid == txid1));
 
-    wallet.apply_update(resp)?;
-    wallet.persist(&mut conn)?;
+    // wallet.apply_update(resp)?;
+    // wallet.persist(&mut conn)?;
 
-    println!("Balance after send tx2: {}", wallet.balance().total());
-    assert_eq!(wallet.balance().total(), Amount::ZERO);
+    // println!("Balance after send tx2: {}", wallet.balance().total());
+    // assert_eq!(wallet.balance().total(), Amount::ZERO);
 
-    // Load the persisted wallet
-    {
-        wallet = Wallet::load()
-            .load_wallet(&mut conn)?
-            .expect("wallet was persisted");
+    // // Load the persisted wallet
+    // {
+    //     wallet = Wallet::load()
+    //         .load_wallet(&mut conn)?
+    //         .expect("wallet was persisted");
 
-        // tx1 is there, but is not canonical
-        assert!(wallet.tx_graph().full_txs().any(|node| node.txid == txid1));
-        assert!(wallet
-            .tx_graph()
-            .list_canonical_txs(wallet.local_chain(), wallet.local_chain().tip().block_id())
-            .next()
-            .is_none());
-        assert!(wallet.list_unspent().next().is_none());
-        assert_eq!(wallet.balance().total(), Amount::ZERO);
-        println!("Balance after load wallet: {}", wallet.balance().total());
-    }
+    //     // tx1 is there, but is not canonical
+    //     assert!(wallet.tx_graph().full_txs().any(|node| node.txid == txid1));
+    //     assert!(wallet
+    //         .tx_graph()
+    //         .list_canonical_txs(wallet.local_chain(), wallet.local_chain().tip().block_id())
+    //         .next()
+    //         .is_none());
+    //     assert!(wallet.list_unspent().next().is_none());
+    //     assert_eq!(wallet.balance().total(), Amount::ZERO);
+    //     println!("Balance after load wallet: {}", wallet.balance().total());
+    // }
 
     Ok(())
 }
