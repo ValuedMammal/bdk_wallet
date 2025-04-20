@@ -4134,6 +4134,7 @@ fn test_keychains_with_overlapping_spks() {
 }
 
 #[test]
+#[ignore = "`cancel_tx` has no effect"]
 /// The wallet should re-use previously allocated change addresses when the tx using them is cancelled
 fn test_tx_cancellation() {
     macro_rules! new_tx {

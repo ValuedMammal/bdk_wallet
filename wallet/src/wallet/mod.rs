@@ -899,6 +899,25 @@ impl Wallet {
             .next()
     }
 
+    /// Get utxo with params
+    pub fn get_utxo_with_params(
+        &self,
+        op: OutPoint,
+        params: CanonicalizationParams,
+    ) -> Option<LocalOutput> {
+        let ((keychain, index), _) = self.indexed_graph.index.txout(op)?;
+        self.indexed_graph
+            .graph()
+            .filter_chain_unspents(
+                &self.chain,
+                self.chain.tip().block_id(),
+                params,
+                core::iter::once(((), op)),
+            )
+            .map(|(_, full_txo)| new_local_utxo(keychain, index, full_txo))
+            .next()
+    }
+
     /// Inserts a [`TxOut`] at [`OutPoint`] into the wallet's transaction graph.
     ///
     /// This is used for providing a previous output's value so that we can use [`calculate_fee`]
@@ -1088,15 +1107,7 @@ impl Wallet {
     /// To iterate over all canonical transactions, including those that are irrelevant, use
     /// [`TxGraph::list_canonical_txs`].
     pub fn transactions(&self) -> impl Iterator<Item = WalletTx> + '_ {
-        let tx_graph = self.indexed_graph.graph();
-        let tx_index = &self.indexed_graph.index;
-        tx_graph
-            .list_canonical_txs(
-                &self.chain,
-                self.chain.tip().block_id(),
-                default_canonical_params(),
-            )
-            .filter(|c_tx| tx_index.is_tx_relevant(&c_tx.tx_node.tx))
+        self.transactions_with_params(default_canonical_params())
     }
 
     /// Array of relevant and canonical transactions in the wallet sorted with a comparator
@@ -1122,6 +1133,18 @@ impl Wallet {
         let mut txs: Vec<WalletTx> = self.transactions().collect();
         txs.sort_unstable_by(compare);
         txs
+    }
+
+    /// List wallet transactions, modified by the given `params`.
+    pub fn transactions_with_params(
+        &self,
+        params: CanonicalizationParams,
+    ) -> impl Iterator<Item = WalletTx> {
+        let tx_graph = self.indexed_graph.graph();
+        let indexer = &self.indexed_graph.index;
+        tx_graph
+            .list_canonical_txs(&self.chain, self.chain.tip().block_id(), params)
+            .filter(|c_tx| indexer.is_tx_relevant(&c_tx.tx_node.tx))
     }
 
     /// Return the balance, separated into available, trusted-pending, untrusted-pending and immature
@@ -1545,6 +1568,13 @@ impl Wallet {
         params.ordering.sort_tx_with_aux_rand(&mut tx, rng);
 
         let psbt = self.complete_transaction(tx, coin_selection.selected, params)?;
+
+        // keep a copy of the unsigned tx in tx-graph
+        self.stage.merge(
+            self.indexed_graph
+                .insert_tx(psbt.unsigned_tx.clone())
+                .into(),
+        );
 
         // recording changes to the change keychain
         if let (Excess::Change { .. }, Some((keychain, index))) = (excess, drain_index) {
@@ -2021,6 +2051,7 @@ impl Wallet {
             vec![]
         // only process optional UTxOs if manually_selected_only is false
         } else {
+            let assume_canonical = params.include_outpoints.iter().map(|op| op.txid).collect();
             self.indexed_graph
                 .graph()
                 // get all unspent UTxOs from wallet
@@ -2029,7 +2060,7 @@ impl Wallet {
                 .filter_chain_unspents(
                     &self.chain,
                     self.chain.tip().block_id(),
-                    default_canonical_params(),
+                    CanonicalizationParams { assume_canonical },
                     self.indexed_graph.index.outpoints().iter().cloned(),
                 )
                 // only create LocalOutput if UTxO is mature

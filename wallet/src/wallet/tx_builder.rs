@@ -140,6 +140,9 @@ pub(crate) struct TxParams {
     pub(crate) bumping_fee: Option<PreviousFee>,
     pub(crate) current_height: Option<absolute::LockTime>,
     pub(crate) allow_dust: bool,
+
+    // must include outpoints (assume canonical)
+    pub(crate) include_outpoints: Vec<OutPoint>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -306,6 +309,38 @@ impl<'a, Cs> TxBuilder<'a, Cs> {
     /// the "utxos" and the "unspendable" list, it will be spent.
     pub fn add_utxo(&mut self, outpoint: OutPoint) -> Result<&mut Self, AddUtxoError> {
         self.add_utxos(&[outpoint])
+    }
+
+    /// Include an input by `outpoint`
+    ///
+    /// The tx in which the outpoint resides is assumed to be canonical, so any existing
+    /// wallet txs that conflict with the residing tx are excluded from the local view of
+    /// the UTXO set.
+    pub fn include_input(&mut self, outpoint: OutPoint) -> &mut Self {
+        use bdk_chain::CanonicalizationParams;
+
+        let wallet = &self.wallet;
+
+        let output = wallet
+            .get_utxo_with_params(
+                outpoint,
+                CanonicalizationParams {
+                    assume_canonical: vec![outpoint.txid],
+                },
+            )
+            .expect("err: unknown utxo");
+
+        let utxo = WeightedUtxo {
+            satisfaction_weight: wallet
+                .public_descriptor(output.keychain)
+                .max_weight_to_satisfy()
+                .expect("descriptor should be satisfiable"),
+            utxo: Utxo::Local(output),
+        };
+
+        self.params.utxos.insert(outpoint, utxo);
+        self.params.include_outpoints.push(outpoint);
+        self
     }
 
     /// Add a foreign UTXO i.e. a UTXO not known by this wallet.
