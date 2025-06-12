@@ -71,7 +71,7 @@ pub use bdk_chain::Balance;
 pub use changeset::ChangeSet;
 pub use params::*;
 pub use persisted::*;
-pub use signer::{SignOptions, SignerError, SignersContainer};
+pub use signer::SignersContainer;
 pub use utils::IsDust;
 pub use utils::TxDetails;
 
@@ -1783,8 +1783,6 @@ impl Wallet {
     /// for further information.
     ///
     /// Returns `true` if the PSBT could be finalized, and `false` otherwise.
-    ///
-    /// The [`SignOptions`] can be used to tweak the behavior of the finalizer.
     pub fn finalize_psbt(&self, psbt: &mut Psbt) -> Result<bool, IndexOutOfBoundsError> {
         let tx = &psbt.unsigned_tx;
 
