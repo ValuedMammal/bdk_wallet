@@ -3153,14 +3153,17 @@ impl Wallet {
 
         // Create psbt
         let mut psbt = selection
-            .create_psbt(bdk_tx::PsbtParams {
-                version,
-                fallback_locktime,
-                fallback_sequence,
-                mandate_full_tx_for_segwit_v0: !params.only_witness_utxo,
-                sighash_type: params.sighash_type,
-                enable_anti_fee_sniping: params.enable_anti_fee_sniping,
-            })
+            .create_psbt_with_rng(
+                bdk_tx::PsbtParams {
+                    version,
+                    fallback_locktime,
+                    fallback_sequence,
+                    mandate_full_tx_for_segwit_v0: !params.only_witness_utxo,
+                    sighash_type: params.sighash_type,
+                    enable_anti_fee_sniping: params.enable_anti_fee_sniping,
+                },
+                rng,
+            )
             .map_err(CreatePsbtError::Psbt)?;
 
         // Add global xpubs.
