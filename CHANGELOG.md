@@ -7,6 +7,65 @@ Contributors do not need to change this file but do need to add changelog detail
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v3.0.0]
+
+### Added
+
+- docs,test: Add docs + test on required use of xpub for multipath constructor [#306](https://github.com/bitcoindevkit/bdk_wallet/pull/306)
+- Add utilities to test persistence [#300](https://github.com/bitcoindevkit/bdk_wallet/pull/300)
+- feat: have a structured IndexOutOfBoundsError type [#302](https://github.com/bitcoindevkit/bdk_wallet/pull/302)
+- feat!: Persist utxo lock status [#259](https://github.com/bitcoindevkit/bdk_wallet/pull/259)
+- Return wallet events when applying updates and blocks (3.0 milestone) [#319](https://github.com/bitcoindevkit/bdk_wallet/pull/319)
+- feature: Add Caravan wallet format import/export support [#205](https://github.com/bitcoindevkit/bdk_wallet/pull/205)
+- Add get_pre_1_wallet_keychains migration helper [#364](https://github.com/bitcoindevkit/bdk_wallet/pull/364)
+- Update README with new codecov badge [#341](https://github.com/bitcoindevkit/bdk_wallet/pull/341)
+- feat: Add apply_unconfirmed_txs_events and apply_evicted_txs_events [#388](https://github.com/bitcoindevkit/bdk_wallet/pull/388)
+
+### Fixed
+
+- fix(wallet): Don't fail in build_fee_bump for missing parent txid [#337](https://github.com/bitcoindevkit/bdk_wallet/pull/337)
+
+### Changed
+
+- feat!: use NetworkKind [#250](https://github.com/bitcoindevkit/bdk_wallet/pull/250)
+- test(descriptor): justify ignored tests and add missing assertions [#369](https://github.com/bitcoindevkit/bdk_wallet/pull/369)
+- Make FutureResult non-Send when no-std [#335](https://github.com/bitcoindevkit/bdk_wallet/pull/335)
+- docs: fix TxOrdering::Untouched doc comment [#372](https://github.com/bitcoindevkit/bdk_wallet/pull/372)
+- Refactor: Move Wallet errors into their dedicated file [#378](https://github.com/bitcoindevkit/bdk_wallet/pull/378)
+- refactor: rename Wallet::indexed_graph field [#373](https://github.com/bitcoindevkit/bdk_wallet/pull/373)
+- ci: bump rust-cache to 2.8.0 [#305](https://github.com/bitcoindevkit/bdk_wallet/pull/305)
+- chore: bump dev version to 3.0.0-alpha.0 [#308](https://github.com/bitcoindevkit/bdk_wallet/pull/308)
+- chore(just): add a _default recipe [#313](https://github.com/bitcoindevkit/bdk_wallet/pull/313)
+- chore: bump MSRV to 1.85.0 [#317](https://github.com/bitcoindevkit/bdk_wallet/pull/317)
+- Add rust-toolchain.toml file [#315](https://github.com/bitcoindevkit/bdk_wallet/pull/315)
+- build(deps): bump actions/upload-artifact from 4 to 5 [#333](https://github.com/bitcoindevkit/bdk_wallet/pull/333)
+- Replace Coveralls with Codecov for coverage reporting [#327](https://github.com/bitcoindevkit/bdk_wallet/pull/327)
+- build(deps): bump actions/checkout from 5 to 6 [#346](https://github.com/bitcoindevkit/bdk_wallet/pull/346)
+- build(deps): bump Swatinem/rust-cache from 2.7.8 to 2.8.2 [#347](https://github.com/bitcoindevkit/bdk_wallet/pull/347)
+- build(deps): bump github/codeql-action from 3 to 4 [#329](https://github.com/bitcoindevkit/bdk_wallet/pull/329)
+- Bump Rust compiler version to stable (1.91.1) [#350](https://github.com/bitcoindevkit/bdk_wallet/pull/350)
+- Bump Rust compiler version to stable (1.92.0) [#356](https://github.com/bitcoindevkit/bdk_wallet/pull/356)
+- chore: Update example links in README [#363](https://github.com/bitcoindevkit/bdk_wallet/pull/363)
+- build(deps): bump actions/upload-artifact from 5 to 6 [#354](https://github.com/bitcoindevkit/bdk_wallet/pull/354)
+- Bump Rust compiler version to stable (1.93.0) [#377](https://github.com/bitcoindevkit/bdk_wallet/pull/377)
+- chore: update CODEOWNERS with ValuedMammal and oleonardolima [#385](https://github.com/bitcoindevkit/bdk_wallet/pull/385)
+- docs: Pass bitcoind_rpc example name on the run recipe [#384](https://github.com/bitcoindevkit/bdk_wallet/pull/384)
+- build(deps): bump codecov/codecov-action from 5.5.1 to 5.5.2 [#353](https://github.com/bitcoindevkit/bdk_wallet/pull/353)
+- Switch to cargo-llvm-cov for code coverage [#371](https://github.com/bitcoindevkit/bdk_wallet/pull/371)
+- docs: Add section on ChangeSet version compatibility [#391](https://github.com/bitcoindevkit/bdk_wallet/pull/391)
+- deps: bump `bdk_chain` to 0.23.2
+- deps: bump `bitcoin` to 0.32.8
+- deps: bump `miniscript` to 12.3.5
+- deps: bump `rand_core` to 0.6.4
+- deps: bump `bip39` to 2.2.2
+- deps: bump `tempfile` to 3.26.0
+
+### Removed
+
+- refactor(wallet)!: Remove unused ApplyBlockError [#382](https://github.com/bitcoindevkit/bdk_wallet/pull/382)
+- refactor!: Remove `TxBuilder::include_output_redeem_witness_script` [#392](https://github.com/bitcoindevkit/bdk_wallet/pull/392)
+- refactor!: Remove `Wallet::cancel_tx` function [#393](https://github.com/bitcoindevkit/bdk_wallet/pull/393)
+
 ## [wallet-2.1.0]
 
 ### Added
@@ -1330,3 +1389,4 @@ final transaction is created by calling `finish` on the builder.
 [wallet-2.0.0-beta.0]: https://github.com/bitcoindevkit/bdk/releases/tag/wallet-2.0.0-beta.0
 [wallet-2.0.0]: https://github.com/bitcoindevkit/bdk/releases/tag/wallet-2.0.0
 [wallet-2.1.0]: https://github.com/bitcoindevkit/bdk/releases/tag/wallet-2.1.0
+[v3.0.0]: https://github.com/bitcoindevkit/bdk/releases/tag/v3.0.0
