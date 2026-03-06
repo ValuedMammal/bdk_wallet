@@ -20,18 +20,18 @@ rustdoc-args = ["--cfg", "docsrs"]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
 
 [dependencies]
-bdk_chain = { version = "0.23.1", features = ["miniscript", "serde"], default-features = false }
-bitcoin = { version = "0.32.7", features = ["serde", "base64"], default-features = false }
-miniscript = { version = "12.3.1", features = ["serde"], default-features = false }
-rand_core = { version = "0.6.0" }
+bdk_chain = { version = "0.23.2", features = ["miniscript", "serde"], default-features = false }
+bitcoin = { version = "0.32.8", features = ["serde", "base64"], default-features = false }
+miniscript = { version = "12.3.5", features = ["serde"], default-features = false }
+rand_core = { version = "0.6.4" }
 serde_json = { version = "1" }
 serde = { version = "1", features = ["derive"] }
 
 # Optional dependencies
-anyhow = { version = "1.0.98", optional = true }
+anyhow = { version = "1", optional = true }
 bdk_file_store = { version = "0.21.1", optional = true }
-bip39 = { version = "2.0", optional = true }
-tempfile = { version = "3.20.0", optional = true }
+bip39 = { version = "2.2.2", optional = true }
+tempfile = { version = "3.26.0", optional = true }
 
 [features]
 default = ["std"]
@@ -47,11 +47,11 @@ test-utils = ["std", "anyhow", "tempfile"]
 anyhow = "1"
 assert_matches = "1.5.0"
 bdk_bitcoind_rpc = { version = "0.21.0" }
-bdk_electrum = { version = "0.23.1" }
+bdk_electrum = { version = "0.23.2" }
 bdk_esplora = { version = "0.22.1", features = ["async-https", "blocking-https", "tokio"] }
 bdk_wallet = { path = ".", features = ["rusqlite", "file_store", "test-utils"] }
-clap = { version = "4.5.17", features = ["derive", "env"] }
-ctrlc = "3.4.6"
+clap = { version = "4.5.60", features = ["derive", "env"] }
+ctrlc = "3.5.2"
 rand = "0.8"
 tempfile = "3"
 tokio = { version = "1.38.1", features = ["rt", "rt-multi-thread", "macros"] }
