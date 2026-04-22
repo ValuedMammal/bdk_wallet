@@ -184,6 +184,61 @@ impl fmt::Display for AddressInfo {
 /// A `CanonicalTx` managed by a `Wallet`.
 pub type WalletTx<'a> = CanonicalTx<'a, Arc<Transaction>, ConfirmationBlockTime>;
 
+/// The finalization status for a single PSBT input.
+#[derive(Debug, PartialEq)]
+pub enum FinalizeInputOutcome {
+    /// The input was already finalized before this call.
+    AlreadyFinalized,
+    /// The input was successfully finalized during this call.
+    Finalized,
+    /// The wallet could not derive a descriptor for the input.
+    MissingDescriptor,
+    /// The wallet found the descriptor but could not construct the input satisfaction.
+    CouldNotSatisfy(miniscript::Error),
+}
+
+impl FinalizeInputOutcome {
+    /// Whether the input is finalized after this call.
+    pub fn is_finalized(&self) -> bool {
+        matches!(self, Self::AlreadyFinalized | Self::Finalized)
+    }
+}
+
+/// Holds per-input PSBT finalization outcomes.
+#[derive(Debug, PartialEq)]
+pub struct FinalizedInputs {
+    outcomes: BTreeMap<usize, FinalizeInputOutcome>,
+}
+
+impl FinalizedInputs {
+    fn new() -> Self {
+        Self {
+            outcomes: BTreeMap::new(),
+        }
+    }
+
+    fn insert(&mut self, input_index: usize, outcome: FinalizeInputOutcome) {
+        self.outcomes.insert(input_index, outcome);
+    }
+
+    /// Whether all inputs are finalized after this call.
+    pub fn is_finalized(&self) -> bool {
+        self.outcomes
+            .values()
+            .all(FinalizeInputOutcome::is_finalized)
+    }
+
+    /// Borrow the per-input finalization outcomes.
+    pub fn outcomes(&self) -> &BTreeMap<usize, FinalizeInputOutcome> {
+        &self.outcomes
+    }
+
+    /// Consume the collection and return the per-input finalization outcomes.
+    pub fn into_outcomes(self) -> BTreeMap<usize, FinalizeInputOutcome> {
+        self.outcomes
+    }
+}
+
 impl Wallet {
     /// Build a new single descriptor [`Wallet`].
     ///
@@ -1949,6 +2004,111 @@ impl Wallet {
     /// Return the secp256k1 context used for all signing operations.
     pub fn secp_ctx(&self) -> &SecpCtx {
         &self.secp
+    }
+
+    /// Attempt to finalize each input of a PSBT, returning a per-input outcome.
+    ///
+    /// For each input the wallet attempts to derive the descriptor and construct the full
+    /// satisfaction (script sig or witness). Timelock constraints (`after`/`older` fragments) are
+    /// satisfied by reading `nLockTime` and `nSequence` directly from the PSBT transaction fields,
+    /// so the PSBT must be built with the correct values before calling this function.
+    ///
+    /// Already-finalized inputs (those with a `final_script_sig` or `final_script_witness`) are
+    /// included in the result as [`AlreadyFinalized`](FinalizeInputOutcome::AlreadyFinalized) and
+    /// are otherwise left untouched.
+    ///
+    /// # Returns
+    ///
+    /// [`FinalizedInputs`] — a map from input index to [`FinalizeInputOutcome`].
+    /// Call [`FinalizedInputs::is_finalized`] to check whether all inputs are finalized.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IndexOutOfBoundsError`] only when the PSBT is structurally invalid
+    /// (an input index is out of bounds). Per-input failures such as a missing descriptor or an
+    /// unsatisfied spending condition are reported as [`FinalizeInputOutcome`] values in the map,
+    /// not as top-level errors.
+    pub fn try_finalize_psbt(
+        &self,
+        psbt: &mut Psbt,
+    ) -> Result<FinalizedInputs, IndexOutOfBoundsError> {
+        let tx = &psbt.unsigned_tx;
+        let mut finalized_inputs = FinalizedInputs::new();
+
+        for input_index in 0..tx.input.len() {
+            let psbt_input = psbt
+                .inputs
+                .get(input_index)
+                .ok_or(IndexOutOfBoundsError::new(input_index, psbt.inputs.len()))?;
+
+            // The input appears already finalized
+            if psbt_input.final_script_sig.is_some() || psbt_input.final_script_witness.is_some() {
+                finalized_inputs.insert(input_index, FinalizeInputOutcome::AlreadyFinalized);
+                continue;
+            }
+
+            // - Try to derive the descriptor by looking at the txout. If it's in our database, we
+            //   know exactly which `keychain` to use, and which derivation index it is.
+            // - If that fails, try to derive it by looking at the psbt input: the complete logic is
+            //   in `src/descriptor/mod.rs`, but it will basically look at `bip32_derivation`,
+            //   `redeem_script` and `witness_script` to determine the right derivation.
+            // - If that also fails, it will try it on the internal descriptor, if present.
+            let descriptor = match psbt
+                .get_utxo_for(input_index)
+                .and_then(|txout| self.get_descriptor_for_txout(&txout))
+                .or_else(|| {
+                    self.tx_graph.index.keychains().find_map(|(_, desc)| {
+                        desc.derive_from_psbt_input(
+                            psbt_input,
+                            psbt.get_utxo_for(input_index),
+                            &self.secp,
+                        )
+                    })
+                }) {
+                Some(desc) => desc,
+                None => {
+                    finalized_inputs.insert(input_index, FinalizeInputOutcome::MissingDescriptor);
+                    continue;
+                }
+            };
+
+            let mut tmp_input = bitcoin::TxIn::default();
+            match descriptor.satisfy(&mut tmp_input, PsbtInputSatisfier::new(psbt, input_index)) {
+                Ok(..) => {
+                    let length = psbt.inputs.len();
+                    let psbt_input = psbt
+                        .inputs
+                        .get_mut(input_index)
+                        .ok_or(IndexOutOfBoundsError::new(input_index, length))?;
+                    // Set the UTXO fields, final script_sig and witness
+                    // and clear everything else.
+                    let original = mem::take(psbt_input);
+                    psbt_input.non_witness_utxo = original.non_witness_utxo;
+                    psbt_input.witness_utxo = original.witness_utxo;
+                    if !tmp_input.script_sig.is_empty() {
+                        psbt_input.final_script_sig = Some(tmp_input.script_sig);
+                    }
+                    if !tmp_input.witness.is_empty() {
+                        psbt_input.final_script_witness = Some(tmp_input.witness);
+                    }
+                    finalized_inputs.insert(input_index, FinalizeInputOutcome::Finalized);
+                }
+                Err(e) => {
+                    finalized_inputs.insert(input_index, FinalizeInputOutcome::CouldNotSatisfy(e));
+                }
+            }
+        }
+
+        // Clear derivation paths from outputs only when every input is finalized.
+        if finalized_inputs.is_finalized() {
+            for output in &mut psbt.outputs {
+                output.bip32_derivation.clear();
+                output.tap_key_origins.clear();
+                output.tap_internal_key.take();
+            }
+        }
+
+        Ok(finalized_inputs)
     }
 
     /// The derivation index of this wallet. It will return `None` if it has not derived any
