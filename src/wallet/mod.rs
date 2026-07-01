@@ -69,7 +69,7 @@ use crate::descriptor::{
     Policy, XKeyUtils, calc_checksum, check_wallet_descriptor, error::Error as DescriptorError,
     policy::BuildSatisfaction,
 };
-use crate::psbt::PsbtUtils;
+use crate::psbt::{PsbtUtils, validated_non_witness_prevout};
 use crate::types::*;
 use crate::wallet::{
     coin_selection::{DefaultCoinSelectionAlgorithm, Excess, InsufficientFunds},
@@ -119,8 +119,9 @@ type IndexedTxOut = ((KeychainKind, u32), FullTxOut<ConfirmationBlockTime>);
 /// The `Wallet` acts as a way of coherently interfacing with output descriptors and related
 /// transactions. Its main components are:
 ///
-/// 1. output *descriptors* from which it can derive addresses.
-/// 2. [`signer`]s that can contribute signatures to addresses instantiated from the descriptors.
+/// 1. output *descriptors* from which it derives addresses.
+/// 2. local chain state.
+/// 3. a transaction graph indexed by those descriptors.
 ///
 /// The user is responsible for loading and writing wallet changes which are represented as
 /// [`ChangeSet`]s (see [`take_staged`]). Also see individual functions and example for instructions
@@ -403,11 +404,12 @@ impl Wallet {
 
     /// Build [`Wallet`] by loading from persistence or [`ChangeSet`].
     ///
-    /// Note that the descriptor secret keys are not persisted to the db. You can add
-    /// signers after-the-fact with [`Wallet::add_signer`] or [`Wallet::set_keymap`]. You
-    /// can also add keys when building the wallet by using [`LoadParams::keymap`]. Finally
-    /// you can check the wallet's descriptors are what you expect with [`LoadParams::descriptor`]
-    /// which will try to populate signers if [`LoadParams::extract_keys`] is enabled.
+    /// Note that descriptor secret keys are not persisted to the db. The recommended signing
+    /// flow is to keep signing keys outside the wallet and pass them to [`bitcoin::Psbt::sign`]
+    /// with [`Wallet::secp_ctx`].
+    /// [`Wallet::sign_with_signers`] supports caller-owned [`SignersContainer`]s while the
+    /// [`signer`] module is phased out.
+    /// You can check the wallet's descriptors are what you expect with [`LoadParams::descriptor`].
     ///
     /// # Synopsis
     ///
@@ -426,18 +428,12 @@ impl Wallet {
     /// // Load a wallet that is persisted to SQLite database.
     /// # let temp_dir = tempfile::tempdir().expect("must create tempdir");
     /// # let file_path = temp_dir.path().join("store.db");
-    /// # let external_keymap = Default::default();
-    /// # let internal_keymap = Default::default();
     /// # let genesis_hash = BlockHash::all_zeros();
     /// let mut conn = bdk_wallet::rusqlite::Connection::open(file_path)?;
     /// let mut wallet = Wallet::load()
-    ///     // check loaded descriptors matches these values and extract private keys
+    ///     // check loaded descriptors matches these values
     ///     .descriptor(KeychainKind::External, Some(EXTERNAL_DESC))
     ///     .descriptor(KeychainKind::Internal, Some(INTERNAL_DESC))
-    ///     .extract_keys()
-    ///     // you can also manually add private keys
-    ///     .keymap(KeychainKind::External, external_keymap)
-    ///     .keymap(KeychainKind::Internal, internal_keymap)
     ///     // ensure loaded wallet's genesis hash matches this value
     ///     .check_genesis_hash(genesis_hash)
     ///     // set a lookahead for our indexer
@@ -1601,18 +1597,24 @@ impl Wallet {
     /// # use bitcoin::*;
     /// # use bdk_wallet::*;
     /// # use bdk_wallet::ChangeSet;
+    /// # use bdk_wallet::descriptor::IntoWalletDescriptor;
     /// # use bdk_wallet::error::CreateTxError;
     /// # use anyhow::Error;
-    /// # let descriptor = "wpkh(tpubD6NzVbkrYhZ4Xferm7Pz4VnjdcDPFyjVu5K4iZXQ4pVN8Cks4pHVowTBXBKRhX64pkRyJZJN5xAKj4UDNnLPb5p2sSKXhewoYx5GbTdUFWq/*)";
+    /// # use miniscript::descriptor::KeyMapWrapper;
+    /// # let descriptor = "tr([73c5da0a/86'/0'/0']tprv8fMn4hSKPRC1oaCPqxDb1JWtgkpeiQvZhsr8W2xuy3GEMkzoArcAWTfJxYb6Wj8XNNDWEjfYKK4wGQXh3ZUXhDF2NcnsALpWTeSwarJt7Vc/0/*)";
     /// # let mut wallet = doctest_wallet!();
     /// # let to_address = Address::from_str("2N4eQYCbKUHCCTUjBJeHcJp9ok6J2GZsTDt").unwrap().assume_checked();
+    /// let (_, keymap) = descriptor
+    ///     .into_wallet_descriptor(wallet.secp_ctx(), wallet.network().into())?;
+    /// let signer = KeyMapWrapper::from(keymap);
     /// let mut psbt = {
     ///     let mut builder = wallet.build_tx();
     ///     builder
     ///         .add_recipient(to_address.script_pubkey(), Amount::from_sat(50_000));
     ///     builder.finish()?
     /// };
-    /// let _ = wallet.sign(&mut psbt, SignOptions::default())?;
+    /// psbt.sign(&signer, wallet.secp_ctx()).map_err(|(_, e)| Error::msg(format!("{e:?}")))?;
+    /// wallet.finalize_psbt(&mut psbt, SignOptions::default())?;
     /// let tx = psbt.clone().extract_tx().expect("tx");
     /// // broadcast tx but it's taking too long to confirm so we want to bump the fee
     /// let mut psbt =  {
@@ -1622,7 +1624,8 @@ impl Wallet {
     ///     builder.finish()?
     /// };
     ///
-    /// let _ = wallet.sign(&mut psbt, SignOptions::default())?;
+    /// psbt.sign(&signer, wallet.secp_ctx()).map_err(|(_, e)| Error::msg(format!("{e:?}")))?;
+    /// wallet.finalize_psbt(&mut psbt, SignOptions::default())?;
     /// let fee_bumped_tx = psbt.extract_tx();
     /// // broadcast fee_bumped_tx to replace original
     /// # Ok::<(), anyhow::Error>(())
@@ -1853,17 +1856,22 @@ impl Wallet {
         self.update_psbt_with_descriptor(psbt)
             .map_err(SignerError::MiniscriptPsbt)?;
 
-        // If we aren't allowed to use `witness_utxo`, ensure that every input (except p2tr and
-        // finalized ones) has the `non_witness_utxo`.
-        if !sign_options.trust_witness_utxo
-            && psbt
-                .inputs
-                .iter()
-                .filter(|i| i.final_script_witness.is_none() && i.final_script_sig.is_none())
-                .filter(|i| i.tap_internal_key.is_none() && i.tap_merkle_root.is_none())
-                .any(|i| i.non_witness_utxo.is_none())
-        {
-            return Err(SignerError::MissingNonWitnessUtxo);
+        if !sign_options.trust_witness_utxo {
+            let inputs = psbt.inputs.iter().zip(psbt.unsigned_tx.input.iter());
+            let all_taproot = inputs
+                .clone()
+                .all(|(input, txin)| self.is_verified_taproot_input(input, txin.previous_output));
+
+            if !all_taproot {
+                for (input, txin) in inputs {
+                    if input.non_witness_utxo.is_none() {
+                        return Err(SignerError::MissingNonWitnessUtxo);
+                    }
+                    if validated_non_witness_prevout(input, txin.previous_output).is_none() {
+                        return Err(SignerError::InvalidNonWitnessUtxo);
+                    }
+                }
+            }
         }
 
         // If the user hasn't explicitly opted-in, refuse to sign the transaction unless every input
@@ -1889,6 +1897,20 @@ impl Wallet {
         } else {
             Ok(false)
         }
+    }
+
+    /// Whether this outpoint is a verified p2tr.
+    ///
+    /// `witness_utxo` scriptPubKey is unauthenticated; trusting it would skip the prev-tx check.
+    fn is_verified_taproot_input(&self, input: &psbt::Input, outpoint: OutPoint) -> bool {
+        if let Some(prev_tx) = self.tx_graph.graph().get_tx(outpoint.txid) {
+            return prev_tx
+                .output
+                .get(outpoint.vout as usize)
+                .is_some_and(|prevout| prevout.script_pubkey.is_p2tr());
+        }
+        validated_non_witness_prevout(input, outpoint)
+            .is_some_and(|prevout| prevout.script_pubkey.is_p2tr())
     }
 
     /// Return the spending policies for the wallet's descriptor.

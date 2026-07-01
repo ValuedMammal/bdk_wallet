@@ -253,11 +253,6 @@ impl LoadParams {
     }
 
     /// Checks the `expected_descriptor` matches exactly what is loaded for `keychain`.
-    ///
-    /// # Note
-    ///
-    /// You must also specify [`extract_keys`](Self::extract_keys) if you wish to add a signer
-    /// for an expected descriptor containing secrets.
     pub fn descriptor<D>(mut self, keychain: KeychainKind, expected_descriptor: Option<D>) -> Self
     where
         D: IntoWalletDescriptor + Send + 'static,
