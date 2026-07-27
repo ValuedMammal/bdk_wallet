@@ -1077,6 +1077,7 @@ fn test_create_tx_policy_path_required() {
 
 #[test]
 fn test_create_tx_policy_path_no_csv() {
+    #![allow(deprecated)]
     let (descriptor, change_descriptor) = get_test_wpkh_and_change_desc();
     let mut wallet = Wallet::create(descriptor, change_descriptor)
         .network(Network::Regtest)
@@ -1115,6 +1116,7 @@ fn test_create_tx_policy_path_no_csv() {
 
 #[test]
 fn test_create_tx_policy_path_use_csv() {
+    #![allow(deprecated)]
     let (mut wallet, _) = get_funded_wallet_single(get_test_a_or_b_plus_csv());
 
     let external_policy = wallet.policies(KeychainKind::External).unwrap().unwrap();
@@ -1136,6 +1138,7 @@ fn test_create_tx_policy_path_use_csv() {
 
 #[test]
 fn test_create_tx_policy_path_ignored_subtree_with_csv() {
+    #![allow(deprecated)]
     let (mut wallet, _) = get_funded_wallet_single(
         "wsh(or_d(pk(cRjo6jqfVNP33HhSS76UhXETZsGTZYx8FMFvR9kpbtCSV1PmdZdu),or_i(and_v(v:pkh(cVpPVruEDdmutPzisEsYvtST1usBR3ntr8pXSyt6D2YYqXRyPcFW),older(30)),and_v(v:pkh(cMnkdebixpXMPfkcNEjjGin7s94hiehAH4mLbYkZoh9KSiNNmqC8),older(90)))))",
     );
@@ -2470,6 +2473,7 @@ fn test_taproot_psbt_populate_tap_key_origins() {
 
 #[test]
 fn test_taproot_psbt_populate_tap_key_origins_repeated_key() {
+    #![allow(deprecated)]
     let (mut wallet, _) = get_funded_wallet(get_test_tr_repeated_key(), get_test_tr_single_sig());
     let addr = wallet.reveal_next_address(KeychainKind::External);
 

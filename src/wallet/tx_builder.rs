@@ -279,6 +279,9 @@ impl<'a, Cs> TxBuilder<'a, Cs> {
 
     /// Set the policy path to use while creating the transaction for a given keychain.
     ///
+    /// Use [`Self::set_condition`] instead. If both this and [`Self::set_condition`] are set, the
+    /// condition overrides the path.
+    ///
     /// This method accepts a map where the key is the policy node id (see
     /// [`Policy::id`](crate::descriptor::Policy::id)) and the value is the list of the indexes of
     /// the items that are intended to be satisfied from the policy node (see
@@ -321,6 +324,7 @@ impl<'a, Cs> TxBuilder<'a, Cs> {
     /// multiple entries can be added to the map, one for each node that requires an explicit path.
     ///
     /// ```
+    /// # #![allow(deprecated)]
     /// # use std::str::FromStr;
     /// # use std::collections::BTreeMap;
     /// # use bitcoin::*;
@@ -340,6 +344,7 @@ impl<'a, Cs> TxBuilder<'a, Cs> {
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[deprecated(since = "3.2.0", note = "use set_condition instead")]
     pub fn policy_path(
         &mut self,
         policy_path: BTreeMap<String, Vec<usize>>,

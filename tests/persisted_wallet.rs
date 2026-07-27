@@ -230,6 +230,7 @@ fn wallet_is_persisted() -> anyhow::Result<()> {
 }
 
 #[test]
+#[allow(deprecated)]
 fn wallet_load_checks() -> anyhow::Result<()> {
     fn run<Db, CreateDb, OpenDb>(
         filename: &str,

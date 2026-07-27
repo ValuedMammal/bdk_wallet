@@ -141,6 +141,10 @@ impl CreateParams {
     }
 
     /// Extend the given `keychain`'s `keymap`.
+    #[deprecated(
+        since = "3.2.0",
+        note = "use your KeyMap or Xpriv with bitcoin::Psbt::sign and wallet.secp_ctx() for software signing, or use your own signer for hardware signing. If you rely on SignOptions, use Wallet::sign_with_signers with caller-owned SignersContainers."
+    )]
     pub fn keymap(mut self, keychain: KeychainKind, keymap: KeyMap) -> Self {
         match keychain {
             KeychainKind::External => &mut self.descriptor_keymap,
@@ -243,6 +247,10 @@ impl LoadParams {
     }
 
     /// Extend the given `keychain`'s `keymap`.
+    #[deprecated(
+        since = "3.2.0",
+        note = "use your KeyMap or Xpriv with bitcoin::Psbt::sign and wallet.secp_ctx() for software signing, or use your own signer for hardware signing. If you rely on SignOptions, use Wallet::sign_with_signers with caller-owned SignersContainers."
+    )]
     pub fn keymap(mut self, keychain: KeychainKind, keymap: KeyMap) -> Self {
         match keychain {
             KeychainKind::External => &mut self.descriptor_keymap,
@@ -312,6 +320,10 @@ impl LoadParams {
 
     /// Whether to try extracting private keys from the *provided descriptors* upon loading.
     /// See also [`LoadParams::descriptor`].
+    #[deprecated(
+        since = "3.2.0",
+        note = "use your KeyMap or Xpriv with bitcoin::Psbt::sign and wallet.secp_ctx() for software signing, or use your own signer for hardware signing. If you rely on SignOptions, use Wallet::sign_with_signers with caller-owned SignersContainers."
+    )]
     pub fn extract_keys(mut self) -> Self {
         self.extract_keys = true;
         self
