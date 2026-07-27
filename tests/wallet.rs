@@ -6,10 +6,12 @@ use bdk_chain::{BlockId, CanonicalizationParams, ConfirmationBlockTime};
 use bdk_wallet::KeychainKind;
 use bdk_wallet::coin_selection;
 use bdk_wallet::coin_selection::InsufficientFunds;
-use bdk_wallet::descriptor::{DescriptorError, calc_checksum};
+use bdk_wallet::descriptor::{
+    DescriptorError, ExtractPolicy, calc_checksum, policy::BuildSatisfaction,
+};
 use bdk_wallet::error::CreateTxError;
 use bdk_wallet::psbt::PsbtUtils;
-use bdk_wallet::signer::{SignOptions, SignerError};
+use bdk_wallet::signer::{SignOptions, SignerError, SignersContainer};
 use bdk_wallet::test_utils::*;
 use bdk_wallet::{
     AddressInfo, Balance, FinalizeInputOutcome, IndexOutOfBoundsError, PersistedWallet, Update,
@@ -1150,6 +1152,115 @@ fn test_create_tx_policy_path_ignored_subtree_with_csv() {
     builder
         .add_recipient(addr.script_pubkey(), Amount::from_sat(30_000))
         .policy_path(path, KeychainKind::External);
+    let psbt = builder.finish().unwrap();
+
+    assert_eq!(psbt.unsigned_tx.input[0].sequence, Sequence(0xFFFFFFFD));
+}
+
+#[test]
+fn test_create_tx_condition_no_csv() {
+    let (descriptor, change_descriptor) = get_test_wpkh_and_change_desc();
+    let mut wallet = Wallet::create(descriptor, change_descriptor)
+        .network(Network::Regtest)
+        .create_wallet_no_persist()
+        .expect("wallet");
+
+    let tx = Transaction {
+        version: transaction::Version::non_standard(0),
+        lock_time: absolute::LockTime::ZERO,
+        input: vec![],
+        output: vec![TxOut {
+            script_pubkey: wallet
+                .next_unused_address(KeychainKind::External)
+                .script_pubkey(),
+            value: Amount::from_sat(50_000),
+        }],
+    };
+    insert_tx(&mut wallet, tx);
+
+    // `get_condition` ignores the signer-dependent parts of the policy, so no signers are needed.
+    let policy = wallet
+        .public_descriptor(KeychainKind::External)
+        .extract_policy(
+            &SignersContainer::default(),
+            BuildSatisfaction::None,
+            wallet.secp_ctx(),
+        )
+        .unwrap()
+        .expect("descriptor has a spending policy");
+    // child #0 is just the key "A"
+    let path = vec![(policy.id.clone(), vec![0])].into_iter().collect();
+    let condition = policy.get_condition(&path).unwrap();
+
+    let addr = Address::from_str("2N1Ffz3WaNzbeLFBb51xyFMHYSEUXcbiSoX")
+        .unwrap()
+        .assume_checked();
+    let mut builder = wallet.build_tx();
+    builder
+        .add_recipient(addr.script_pubkey(), Amount::from_sat(30_000))
+        .set_condition(condition);
+    let psbt = builder.finish().unwrap();
+
+    assert_eq!(psbt.unsigned_tx.input[0].sequence, Sequence(0xFFFFFFFD));
+}
+
+#[test]
+fn test_create_tx_condition_use_csv() {
+    let (mut wallet, _) = get_funded_wallet_single(get_test_a_or_b_plus_csv());
+
+    // `get_condition` ignores the signer-dependent parts of the policy, so no signers are needed.
+    let policy = wallet
+        .public_descriptor(KeychainKind::External)
+        .extract_policy(
+            &SignersContainer::default(),
+            BuildSatisfaction::None,
+            wallet.secp_ctx(),
+        )
+        .unwrap()
+        .expect("descriptor has a spending policy");
+    // child #1 is and(pk(B),older(144))
+    let path = vec![(policy.id.clone(), vec![1])].into_iter().collect();
+    let condition = policy.get_condition(&path).unwrap();
+
+    let addr = Address::from_str("2N1Ffz3WaNzbeLFBb51xyFMHYSEUXcbiSoX")
+        .unwrap()
+        .assume_checked();
+    let mut builder = wallet.build_tx();
+    builder
+        .add_recipient(addr.script_pubkey(), Amount::from_sat(30_000))
+        .set_condition(condition);
+    let psbt = builder.finish().unwrap();
+
+    assert_eq!(psbt.unsigned_tx.input[0].sequence, Sequence(144));
+}
+
+#[test]
+fn test_create_tx_condition_ignored_subtree_with_csv() {
+    let (mut wallet, _) = get_funded_wallet_single(
+        "wsh(or_d(pk(cRjo6jqfVNP33HhSS76UhXETZsGTZYx8FMFvR9kpbtCSV1PmdZdu),or_i(and_v(v:pkh(cVpPVruEDdmutPzisEsYvtST1usBR3ntr8pXSyt6D2YYqXRyPcFW),older(30)),and_v(v:pkh(cMnkdebixpXMPfkcNEjjGin7s94hiehAH4mLbYkZoh9KSiNNmqC8),older(90)))))",
+    );
+
+    // `get_condition` ignores the signer-dependent parts of the policy, so no signers are needed.
+    let policy = wallet
+        .public_descriptor(KeychainKind::External)
+        .extract_policy(
+            &SignersContainer::default(),
+            BuildSatisfaction::None,
+            wallet.secp_ctx(),
+        )
+        .unwrap()
+        .expect("descriptor has a spending policy");
+    // child #0 is pk(cRjo6jqfVNP33HhSS76UhXETZsGTZYx8FMFvR9kpbtCSV1PmdZdu)
+    let path = vec![(policy.id.clone(), vec![0])].into_iter().collect();
+    let condition = policy.get_condition(&path).unwrap();
+
+    let addr = Address::from_str("2N1Ffz3WaNzbeLFBb51xyFMHYSEUXcbiSoX")
+        .unwrap()
+        .assume_checked();
+    let mut builder = wallet.build_tx();
+    builder
+        .add_recipient(addr.script_pubkey(), Amount::from_sat(30_000))
+        .set_condition(condition);
     let psbt = builder.finish().unwrap();
 
     assert_eq!(psbt.unsigned_tx.input[0].sequence, Sequence(0xFFFFFFFD));
